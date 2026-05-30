@@ -1,11 +1,8 @@
-> [!IMPORTTANT]
+> [!IMPORTANT]
 > João Victor Cavalcante Miranda (#14582927)
-
-<!-- respostas comentários e análises !-->
-
 ## Atividade 3 — LED verde piscando com período de 2 s
 
-Código disponível em: https://github.com/JoaoVCMiranda/PSI3441/tree/main/3/main.c
+Repo: https://github.com/JoaoVCMiranda/PSI3441/tree/main/3/main.c
 
 O programa configura o LED verde do FRDM-KL25Z (PTB19, active-low) para piscar com período de 2 s manipulando registradores diretamente, sem bibliotecas de abstração.
 
@@ -20,6 +17,8 @@ O programa configura o LED verde do FRDM-KL25Z (PTB19, active-low) para piscar c
 `PDOR` (Port Data Output Register) guarda o estado atual de cada pino. Modificá-lo com `|=` / `&=` exige uma leitura seguida de escrita — se uma interrupção ocorrer no meio, outro pino pode ser corrompido.
 
 `PSOR` e `PCOR` resolvem isso: escrever `1` em um bit do **PSOR** seta aquele bit no PDOR (pino HIGH); escrever `1` no **PCOR** limpa aquele bit (pino LOW). Escrever `0` não tem efeito sobre nenhum outro bit — a operação é atômica.
+
+Usando as máscaras bitwise.
 
 ```c
 GPIOB_PCOR = (1u << 19);  /* pino LOW  → LED aceso  */

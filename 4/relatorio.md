@@ -1,4 +1,4 @@
-> [!IMPORTTANT]
+> [!IMPORTANT]
 > João Victor Cavalcante Miranda (#14582927)
 
 
@@ -22,6 +22,8 @@ Escrever o número do canal em `ADC0_SC1A` inicia a conversão e zera o flag COC
 
 ```c
 ADC0_SC1A = 8;                       /* canal SE8 = PTB0; inicia conversão */
+// E legal fazer operaoes binarias com c
+// jA que os estados de atividade sao salvos no stream de bits(nomeados LED_VERDE, LED_AZUL)
 while (!(ADC0_SC1A & (1u << 7))) {}  /* aguarda COCO                       */
 unsigned int result = ADC0_RA;
 ```
