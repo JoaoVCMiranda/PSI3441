@@ -1,69 +1,31 @@
-# Atividade 3 — Relatório
+> [!IMPORTTANT]
+> João Victor Cavalcante Miranda (#14582927)
 
-**PSI3441 — Arquitetura de Sistemas Embarcados**
-**Plataforma:** FRDM-KL25Z (ARM Cortex-M0+, ~21 MHz)
+<!-- respostas comentários e análises !-->
 
----
+## Atividade 3 — LED verde piscando com período de 2 s
 
-## Objetivo
+Código disponível em: https://github.com/JoaoVCMiranda/PSI3441/tree/main/3/main.c
 
-Fazer o LED verde (PTB19) piscar com período de 2 segundos, acessando registradores diretamente em C, sem uso do Processor Expert.
+O programa configura o LED verde do FRDM-KL25Z (PTB19, active-low) para piscar com período de 2 s manipulando registradores diretamente, sem bibliotecas de abstração.
 
----
+### Inicialização
 
-## Registradores Utilizados
+1. **Clock da porta B** — `SIM_SCGC5 |= (1 << 10)`: o operador `|=` preserva os bits já setados no registrador; `1 << 10` desloca o valor `1` dez posições para a esquerda, atingindo exatamente o bit que controla o clock da Porta B.
+2. **MUX do pino** — `PORTB_PCR19 = 0x100`: bits [10:8] = `001` seleciona a função GPIO.
+3. **Direção** — `GPIOB_PDDR |= (1 << 19)`: seta o bit 19 como saída.
 
-| Registrador | Endereço | Uso |
-|---|---|---|
-| `SIM_SCGC5` | `0x40048038` | Habilitar clock da Porta B (bit 10) |
-| `PORTB_PCR19` | `0x4004A04C` | Configurar mux do pino PTB19 como GPIO (MUX=001) |
-| `GPIOB_PDDR` | `0x400FF054` | Definir PTB19 como saída (bit 19 = 1) |
-| `GPIOB_PSOR` | `0x400FF044` | Setar pino HIGH → LED apagado (active-low) |
-| `GPIOB_PCOR` | `0x400FF048` | Setar pino LOW  → LED aceso  (active-low) |
+### PDOR, PSOR e PCOR
 
-**Cálculo dos endereços:**
-- Base Porta B (PCR): `0x4004A000` + `19 × 4` = `0x4004A04C`
-- Base GPIO Porta B: `0x400FF040`; PDDR está no offset `+0x14`
+`PDOR` (Port Data Output Register) guarda o estado atual de cada pino. Modificá-lo com `|=` / `&=` exige uma leitura seguida de escrita — se uma interrupção ocorrer no meio, outro pino pode ser corrompido.
 
----
-
-## Função de Espera
+`PSOR` e `PCOR` resolvem isso: escrever `1` em um bit do **PSOR** seta aquele bit no PDOR (pino HIGH); escrever `1` no **PCOR** limpa aquele bit (pino LOW). Escrever `0` não tem efeito sobre nenhum outro bit — a operação é atômica.
 
 ```c
-void delayMs(int n) {
-    int i, j;
-    for (i = 0; i < n; i++)
-        for (j = 0; j < 7000; j++) {}
-}
+GPIOB_PCOR = (1u << 19);  /* pino LOW  → LED aceso  */
+GPIOB_PSOR = (1u << 19);  /* pino HIGH → LED apagado */
 ```
 
-O loop interno com 7000 iterações foi calibrado para aproximadamente 1 ms ao clock default de ~21 MHz do KL25Z. Para período de 2 s usa-se `delayMs(1000)` em cada semiciclo.
+### Função de espera
 
----
-
-## Sequência de Inicialização
-
-1. `SIM_SCGC5 |= (1 << 10)` — habilita clock da Porta B
-2. `PORTB_PCR19 = 0x00000100` — seta MUX=001 (bits [10:8]) para função GPIO
-3. `GPIOB_PDDR |= (1 << 19)` — configura PTB19 como saída
-
----
-
-## Loop Principal
-
-```
-loop:
-    GPIOB_PCOR = (1<<19)   → LED aceso  (pino LOW)
-    delayMs(1000)           → aguarda 1 s
-    GPIOB_PSOR = (1<<19)   → LED apagado (pino HIGH)
-    delayMs(1000)           → aguarda 1 s
-    goto loop
-```
-
-O LED verde do FRDM-KL25Z é active-low: o anodo está ligado a 3,3 V e o catodo ao pino PTB19 via resistor. Portanto, pino LOW acende e pino HIGH apaga o LED.
-
----
-
-## Arquivo
-
-- `main.c` — código-fonte completo
+A função `delayMs(n)` usa dois loops aninhados. O loop interno com `j < 7000` foi calibrado para aproximadamente 1 ms ao clock padrão do KL25Z (~21 MHz). Para o período de 2 s: `delayMs(1000)` em cada semiciclo.
