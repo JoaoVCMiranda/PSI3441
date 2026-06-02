@@ -5,9 +5,9 @@
 
 Repo: https://github.com/JoaoVCMiranda/PSI3441/tree/main/5/main.c
 
-O programa configura o TPM0 do FRDM-KL25Z para gerar um sinal PWM em PTC1 e usa o TPM1 como cronômetro de microsegundos para medir a distância via HC-SR04.
+O programa configura o **TPM2_CH1 no PTB19** (LED verde, active-low) via biblioteca `pwm_z42` do Prof. Rehder para gerar PWM cuja intensidade é proporcional à distância medida pelo HC-SR04 — objeto mais próximo acende o LED com mais brilho.
 
-> **Sem bibliotecas.** O código não possui nenhum `#include`. Todos os periféricos são acessados por `#define` que mapeiam ponteiros `volatile` diretamente nos endereços dos registradores — a mesma abordagem das atividades 3 e 4. O "driver de PWM" é o próprio TPM configurado bit a bit.
+> **Com biblioteca.** O código usa `pwm_z42.h` (gprehder/pwm) que abstrai a configuração do TPM. A inicialização do GPIO e a leitura do echo continuam em acesso direto via `MKL25Z4.h` (SDK Freescale).
 
 ### Diagrama de conexões
 
@@ -15,28 +15,27 @@ O programa configura o TPM0 do FRDM-KL25Z para gerar um sinal PWM em PTC1 e usa 
 
 | Pino (KL25Z) | Header (FRDM) | Direção | Conectado a |
 |---|---|---|---|
-| PTC1 | J1-1 | Saída (PWM) | Canal CH1 do osciloscópio / carga |
+| PTB19 | J2-2 | Saída (PWM LED) | LED verde integrado (active-low) |
 | PTA1 | J2-20 | Saída (TRIG) | HC-SR04 pino TRIG |
-| PTA2 | J2-18 | Entrada (ECHO) | Divisor resistivo → HC-SR04 pino ECHO |
-| 3V3 | J3-4 | — | (referência de tensão) |
+| PTA2 | J2-18 | Entrada (ECHO) | HC-SR04 pino ECHO |
 | 5V | J3-10 | — | HC-SR04 pino VCC |
 | GND | J3-12 | — | HC-SR04 pino GND |
 
 #### Esquema de ligação
 
 ```
-FRDM-KL25Z                        HC-SR04
-┌─────────────┐                  ┌──────────┐
-│         PTA1├─────────────────►│TRIG      │
-│             │                  │          │
-│         PTA2├──┐          ┌───►│ECHO  5 V output
-│             │  │R1 1kΩ    │    │          │
-│          GND├──┤          └────┤          │
-│             │  │R2 2kΩ        │          │
-│             │  └──────────────►GND        │
-│          5 V├───────────────── ►VCC       │
-└─────────────┘                  └──────────┘
+FRDM-KL25Z          HC-SR04
+┌──────────┐        ┌─────────┐
+│     PTA1 ├───────►│ TRIG    │
+│     PTA2 │◄───────│ ECHO    │
+│      GND ├────────│ GND     │
+│       5V ├────────│ VCC     │
+└──────────┘        └─────────┘
+     │
+   PTB19 ──► LED verde (interno, active-low)
 ```
+
+> Conexão direta sem divisor resistivo — prática comum em bancada com este sensor e placa.
 
 **Por que o divisor resistivo em ECHO?**
 O HC-SR04 alimentado a 5 V produz um pulso ECHO de 5 V, mas os pinos GPIO do KL25Z suportam no máximo VDD + 0,3 V ≈ 3,6 V. Sem proteção, 5 V danificaria o pino. O divisor R1 = 1 kΩ / R2 = 2 kΩ reduz para:
