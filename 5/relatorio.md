@@ -5,98 +5,100 @@
 
 Repo: https://github.com/JoaoVCMiranda/PSI3441/tree/main/5/main.c
 
-O programa configura o **TPM2_CH1 no PTB19** (LED verde, active-low) via biblioteca `pwm_z42` do Prof. Rehder para gerar PWM cuja intensidade é proporcional à distância medida pelo HC-SR04 — objeto mais próximo acende o LED com mais brilho.
+O programa usa a biblioteca `pwm_z42` do Prof. Rehder para configurar **TPM2_CH1 em PTB19** (LED verde, active-low) como saída radar: a frequência de piscar é inversamente proporcional à distância — objeto mais próximo = pisca mais rápido. O sensor HC-SR04 envia pulso de trigger em **PTC8** e lê o echo em **PTC9**. A UART0 (**PTA1/PTA2**) envia valores de diagnóstico para o computador host.
 
-> **Com biblioteca.** O código usa `pwm_z42.h` (gprehder/pwm) que abstrai a configuração do TPM. A inicialização do GPIO e a leitura do echo continuam em acesso direto via `MKL25Z4.h` (SDK Freescale).
+> **PTA1 e PTA2 são a UART0 do KL25Z**, conectados ao chip DAPLINK que fornece o USB-serial. Usá-los como GPIO de TRIG/ECHO causava o LED ficar constantemente aceso: a linha TX do DAPLINK fica em HIGH no idle, fazendo o ECHO parecer sempre ativo.
 
 ### Diagrama de conexões
 
-#### Pinagem utilizada
-
-| Pino (KL25Z) | Header (FRDM) | Direção | Conectado a |
+| Pino (KL25Z) | Header (FRDM) | Direção | Função |
 |---|---|---|---|
-| PTB19 | J2-2 | Saída (PWM LED) | LED verde integrado (active-low) |
-| PTA1 | J2-20 | Saída (TRIG) | HC-SR04 pino TRIG |
-| PTA2 | J2-18 | Entrada (ECHO) | HC-SR04 pino ECHO |
-| 5V | J3-10 | — | HC-SR04 pino VCC |
-| GND | J3-12 | — | HC-SR04 pino GND |
-
-#### Esquema de ligação
-
-```
-FRDM-KL25Z          HC-SR04
-┌──────────┐        ┌─────────┐
-│     PTA1 ├───────►│ TRIG    │
-│     PTA2 │◄───────│ ECHO    │
-│      GND ├────────│ GND     │
-│       5V ├────────│ VCC     │
-└──────────┘        └─────────┘
-     │
-   PTB19 ──► LED verde (interno, active-low)
-```
-
-> Conexão direta sem divisor resistivo — prática comum em bancada com este sensor e placa.
-
-**Por que o divisor resistivo em ECHO?**
-O HC-SR04 alimentado a 5 V produz um pulso ECHO de 5 V, mas os pinos GPIO do KL25Z suportam no máximo VDD + 0,3 V ≈ 3,6 V. Sem proteção, 5 V danificaria o pino. O divisor R1 = 1 kΩ / R2 = 2 kΩ reduz para:
+| PTB19 | J2-2 | Saída PWM | LED verde integrado (active-low) |
+| PTC8 | J1-9 | Saída | HC-SR04 TRIG |
+| PTC9 | J1-10 | Entrada | HC-SR04 ECHO |
+| PTA1 | J2-20 | — | UART0 RX (debug) |
+| PTA2 | J2-18 | — | UART0 TX (debug) |
+| 5V | J3-10 | — | HC-SR04 VCC |
+| GND | J3-12 | — | HC-SR04 GND |
 
 ```
-V_PTA2 = 5 V × 2000 / (1000 + 2000) = 3,33 V  ✓
+FRDM-KL25Z            HC-SR04
+┌──────────┐          ┌─────────┐
+│     PTC8 ├─────────►│ TRIG    │
+│     PTC9 │◄─────────│ ECHO    │
+│      GND ├──────────│ GND     │
+│       5V ├──────────│ VCC     │
+│          │          └─────────┘
+│     PTA2 ├──────────► USB-serial (DAPLINK → host)
+└──────────┘
+     PTB19 ──► LED verde (interno)
 ```
 
-O pino TRIG pode ser conectado diretamente: o KL25Z entrega 3,3 V como HIGH, e o limiar de acionamento do HC-SR04 é ≈ 2 V.
+> Sem divisor resistivo — prática comum em bancada com este sensor.
 
-### Fonte de clock dos TPMs
+### Lendo o debug no Linux
 
-O Fast IRC interno gera 4 MHz (`MCG_C2[IRCS]=1`, `MCG_C1[IRCLKEN]=1`). `SIM_SOPT2[TPMSRC]=11` seleciona `MCGIRCCLK` como entrada dos módulos TPM, garantindo frequência conhecida independente da configuração do FLL.
-
-### TPM0 — geração de PWM (1 kHz, 50 %)
-
-```
-MCGIRCCLK (4 MHz) / PS=÷8 → 500 kHz
-MOD = 499 → período = 500 ciclos / 500 kHz = 1 ms = 1 kHz
-C0V = 249 → duty = 250/500 = 50 %
+```bash
+cat /dev/ttyACM0          # imprime "echo mod\n" a cada medicao
+# ou
+screen /dev/ttyACM0 115200
 ```
 
-`TPM0_C0SC`: `MSB=1` (modo PWM), `ELSB=1` (pulso high-true edge-aligned). O pino PTC1 recebe `MUX=4` (ALT4 = `TPM0_CH0`).
+Cada linha tem dois valores separados por espaço: contagem do echo (proporcional à distância) e o valor de MOD do TPM (período do PWM). Objeto perto → echo pequeno → MOD pequeno → LED pisca rápido.
 
-### TPM1 — cronômetro de microsegundos
+### TPM2 — radar com frequência variável
+
+O TPM2 usa `MCGFLLCLK ~21 MHz / PS=128 ≈ 164 kHz` como clock. A cada ciclo de medição o registrador `TPM2->MOD` é atualizado:
 
 ```
-MCGIRCCLK (4 MHz) / PS=÷4 → 1 MHz → 1 tick = 1 µs
-MOD = 0xFFFF → contador livre até 65,535 ms
+MOD = BLINK_NEAR + echo × (BLINK_FAR - BLINK_NEAR) / MAX_CNT
+    = 16000 + echo × (60000 - 16000) / 50000
 ```
 
-Escrever qualquer valor em `TPM1_CNT` reinicia o contador a zero. A função `delayUs(n)` reseta o contador e aguarda `TPM1_CNT < n`.
+| Situação | MOD | Frequência |
+|---|---|---|
+| Objeto perto (echo → 0) | 16 000 | ≈ 10 Hz |
+| Objeto longe (echo → MAX_CNT) | 60 000 | ≈ 2,7 Hz |
+| Sem eco | — | LED apagado (CnV = 0) |
+
+`CnV = MOD / 5` → 20 % duty cycle: flash curto visível, pausa longa — efeito radar.
+
+A biblioteca é chamada via `pwm_tpm_CnV(TPM2, 1, cnv)`. O `TPM2->MOD` é atualizado diretamente pelo ponteiro do SDK pois a biblioteca não oferece função para alterar o período em runtime.
+
+### Low-true PWM e LED active-low
+
+```
+TPM_PWM_L (ELSA=1, ELSB=0):
+  0 ... CnV-1  → output LOW   → LED ON   (active-low)
+  CnV ... MOD  → output HIGH  → LED OFF
+```
+
+- `CnV = 0` → output sempre HIGH → **LED apagado** ✓ (estado sem eco)
+- `CnV = MOD/5` → LED aceso 20 % do período → flash breve ✓
+
+Trocar para low-true simplifica o mapeamento: CnV pequeno = menos brilho, CnV grande = mais brilho — sem precisar inverter a fórmula.
 
 ### HC-SR04 — sequência trigger/echo
 
-1. `TRIG` (PTA1) em HIGH por 10 µs → sensor emite rajada ultrassônica.
-2. `ECHO` (PTA2) sobe para HIGH quando o sinal sai e desce quando o eco retorna.
-3. A duração do pulso em `ECHO` é o tempo de ida e volta, em µs.
+1. `PTC8` em HIGH por ~10 µs → sensor dispara rajada ultrassônica.
+2. `PTC9` sobe para HIGH quando o som sai, desce quando o eco retorna.
+3. A contagem de iterações do loop de polling é proporcional à distância.
 
-```c
-GPIOA_PSOR = TRIG;
-delayUs(10);
-GPIOA_PCOR = TRIG;
-// aguarda rising edge, mede ate falling edge
-```
+A função `measureEcho` retorna `MAX_CNT` se o ECHO nunca sobe (sem sensor ou objeto fora do alcance) — diferenciando "sem resposta" de "objeto muito próximo".
 
-Timeout de 30 ms cobre o range máximo do sensor (~5 m).
-
-### Cálculo de distância
+### UART0 — debug serial
 
 ```
-v_som ≈ 340 m/s = 34000 cm/s
-d = t × v / 2  (ida e volta)
-d_cm = t_µs × 34000 / 2 / 1000000 = t_µs / 58,8 ≈ t_µs / 58
+SIM_SOPT2[UART0SRC] = 01 → MCGFLLCLK ~21 MHz
+SBR = 11 → baud = 21 MHz / (16 × 11) ≈ 119 200 (erro ~3 %)
+PTA1 = UART0_RX (ALT2), PTA2 = UART0_TX (ALT2)
 ```
 
-O resultado `d_cm` é salvo em uma variável `volatile` para leitura via debugger com breakpoint.
+Apenas TX habilitado (`C2 = TE`). Saída: `uart_putu` imprime inteiro sem sinal; cada medição emite uma linha `echo mod\n`.
 
 ---
 
-## Dicionário de Siglas e Conceitos
+## Apêndice — Dicionário de Siglas e Conceitos
 
 ### Siglas de módulos e registradores
 
