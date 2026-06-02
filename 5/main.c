@@ -37,7 +37,8 @@ int main(void) {
     /* TRIG: saida GPIO em PTA1 */
     SIM->SCGC5 |= SIM_SCGC5_PORTA_MASK;
     PORTA->PCR[1] = PORT_PCR_MUX(1);
-    PORTA->PCR[2] = PORT_PCR_MUX(1);
+    /* pull-down em PTA2: evita leitura HIGH espuria quando sensor nao esta ativo */
+    PORTA->PCR[2] = PORT_PCR_MUX(1) | PORT_PCR_PE_MASK;  /* PE=1, PS=0 = pull-down */
     GPIOA->PDDR |= TRIG;
     GPIOA->PCOR  = TRIG;
 
@@ -50,13 +51,17 @@ int main(void) {
     for (;;) {
         unsigned int echo = measureEcho();
 
-        /* mais perto (echo menor) -> duty maior -> LED mais brilhante
-           LED active-low: high-true PWM, maior CnV = mais tempo LOW = mais brilhante */
-        uint16_t duty = (echo >= MAX_CNT)
+        /* echo==0: ECHO nunca subiu (sem sensor/fora de alcance) -> LED apagado
+           echo>=MAX_CNT: timeout (objeto muito longe)           -> LED apagado
+           caso normal: mais perto (echo menor) -> duty maior -> LED mais brilhante */
+        uint16_t duty = (echo == 0 || echo >= MAX_CNT)
             ? 0u
             : (uint16_t)(TPM_MODULE - echo * TPM_MODULE / MAX_CNT);
 
         pwm_tpm_CnV(TPM2, 1, duty);
+
+        /* HC-SR04 requer >= 60 ms entre triggers para nao travar o sensor */
+        for (volatile unsigned int i = 0; i < 400000u; i++) {}
     }
 
     return 0;
