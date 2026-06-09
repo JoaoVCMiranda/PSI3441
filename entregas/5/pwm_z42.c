@@ -186,8 +186,7 @@ bool pwm_tpm_Ch_Init(TPM_MemMapPtr tpm, uint16_t channel, uint8_t mode,
 		else return false;
 	}
 	else return false;
-
-	// Esta linha já estava correta da nossa depuração anterior
+	
 	tpm->CONTROLS[channel].CnSC |= mode;
 
 	return true;
@@ -197,7 +196,6 @@ bool pwm_tpm_Ch_Init(TPM_MemMapPtr tpm, uint16_t channel, uint8_t mode,
 *****************************************************************************************/
 void pwm_tpm_CnV(TPM_MemMapPtr tpm, uint16_t channel, uint16_t value)
 {
-	// Esta linha já estava correta da nossa depuração anterior
 	tpm->CONTROLS[channel].CnV = value;
 }
 /***************************************************************************************/

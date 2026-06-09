@@ -1,0 +1,3 @@
+entregas/**/*.elf
+entregas/**/*.bin
+entregas/**/*.map

@@ -1,8 +1,3 @@
-id: PSI3441
-status: 🌳
-contatos:
-  - "[[Gustavo Pamplona Rehder|Prof. Rehder]]"
----
 
 # PSI3441
 
