@@ -1,7 +1,3 @@
-edisciplinas: https://edisciplinas.usp.br/course/view.php?id=141560
-contatos:
-- "[[Gustavo Pamplona Rehder|Prof. Rehder]]"
----
 
 # Arquitetura de Sistemas Embarcados
 
