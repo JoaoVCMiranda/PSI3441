@@ -16,5 +16,11 @@
 			"path": "../entregas/5-1"
 		}
 	],
-	"settings": {}
+	"settings": {
+		"cmake.configureOnOpen": false,
+		"cmake.automaticReconfigure": false,
+		"cmake.ignoreCMakeListsMissing": true,
+		"cmake.sourceDirectory": "${workspaceFolder}",
+		"cmake.buildDirectory": "${workspaceFolder}/build"
+	}
 }

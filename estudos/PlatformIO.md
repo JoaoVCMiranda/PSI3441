@@ -130,6 +130,28 @@ debug_tool = cmsis-dap
 
 ---
 
+## CMake Tools no VS Code — cuidado
+
+A extensão **CMake Tools** (`ms-vscode.cmake-tools`) interfere com projetos PlatformIO+Zephyr. Ao abrir o workspace, ela varre subpastas e encontra os `zephyr/CMakeLists.txt` — que precisam de `ZEPHYR_BASE` apontando para o SDK do PlatformIO e do toolchain ARM, não do sistema.
+
+Resultado: CMake Tools tenta configurar com `gcc` do sistema, falha, e ainda joga a pasta `build/` no root do repositório.
+
+**Fix no `.code-workspace`:**
+
+```json
+"settings": {
+    "cmake.configureOnOpen": false,
+    "cmake.automaticReconfigure": false,
+    "cmake.ignoreCMakeListsMissing": true,
+    "cmake.sourceDirectory": "${workspaceFolder}",
+    "cmake.buildDirectory": "${workspaceFolder}/build"
+}
+```
+
+Os `zephyr/CMakeLists.txt` existem para builds diretos com `west` — não são para o CMake Tools do VS Code. O PlatformIO tem seu próprio sistema de build interno e não precisa da extensão CMake.
+
+---
+
 ## Curiosidade — como o PlatformIO encontra o Zephyr SDK
 
 Quando `framework = zephyr` é especificado, PlatformIO baixa automaticamente:

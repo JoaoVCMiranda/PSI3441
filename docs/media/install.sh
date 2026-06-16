@@ -237,6 +237,116 @@ EOF
 }
 
 
+# ── 8. Environment variables (optional) ──────────────────────────────────────
+configure_env_vars() {
+    section "Environment Variables (optional)"
+
+    cat <<'INFO'
+
+  This step writes shell environment variables to your config files.
+  It is OPTIONAL — PlatformIO and PyOCD work without these, but they
+  let you control where packages are stored and enable 'west' direct builds.
+
+  Variables:
+
+    PLATFORMIO_CORE_DIR
+      Where PlatformIO stores toolchains, packages and cache.
+      Default (uv install): ~/.local/share/platformio
+      Change this to keep packages off your home partition or on a faster disk.
+      Remove: ~/.platformio will NOT be created when this is set.
+
+    ZEPHYR_BASE  (optional)
+      Path to the Zephyr source tree. Only needed if you run 'west' directly.
+      PlatformIO builds do NOT require this — it manages its own copy.
+      The CMakeLists.txt files in zephyr/ use it via $ENV{ZEPHYR_BASE}.
+
+  To REMOVE the variables later:
+    Delete the lines between the markers below from each shell config file:
+      # >>> kl25z env (added by install.sh) >>>
+      ...
+      # <<< kl25z env <<<
+
+INFO
+
+    read -r -p "  Configure environment variables? [y/N] " REPLY
+    if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+        info "Skipping environment variable setup."
+        return
+    fi
+
+    # ── PLATFORMIO_CORE_DIR ─────────────────────────────────────────────────
+    DEFAULT_PIO_DIR="$HOME/.local/share/platformio"
+    echo ""
+    read -r -p "  PLATFORMIO_CORE_DIR [$DEFAULT_PIO_DIR]: " PIO_DIR
+    PIO_DIR="${PIO_DIR:-$DEFAULT_PIO_DIR}"
+
+    # ── ZEPHYR_BASE (optional) ───────────────────────────────────────────────
+    echo ""
+    read -r -p "  ZEPHYR_BASE (leave empty to skip): " ZEPHYR_BASE_VAL
+
+    # ── Detect shells ────────────────────────────────────────────────────────
+    SHELLS_TO_CONFIG=()
+    [ -f "$HOME/.bashrc" ]               && SHELLS_TO_CONFIG+=("bash:$HOME/.bashrc")
+    [ -f "$HOME/.zshrc" ]                && SHELLS_TO_CONFIG+=("zsh:$HOME/.zshrc")
+    [ -f "$HOME/.profile" ]              && SHELLS_TO_CONFIG+=("sh:$HOME/.profile")
+    command -v fish &>/dev/null          && SHELLS_TO_CONFIG+=("fish:$HOME/.config/fish/conf.d/kl25z.fish")
+
+    if [ ${#SHELLS_TO_CONFIG[@]} -eq 0 ]; then
+        warn "No shell config files found. Set variables manually."
+        return
+    fi
+
+    echo ""
+    info "Will write to:"
+    for entry in "${SHELLS_TO_CONFIG[@]}"; do
+        echo "    ${entry%%:*} → ${entry##*:}"
+    done
+    echo ""
+    read -r -p "  Proceed? [Y/n] " CONFIRM
+    [[ "$CONFIRM" =~ ^[Nn]$ ]] && { info "Aborted."; return; }
+
+    BLOCK_START="# >>> kl25z env (added by install.sh) >>>"
+    BLOCK_END="# <<< kl25z env <<<"
+
+    for entry in "${SHELLS_TO_CONFIG[@]}"; do
+        SHELL_NAME="${entry%%:*}"
+        SHELL_FILE="${entry##*:}"
+
+        # Idempotent: remove existing block before re-writing
+        if grep -q "$BLOCK_START" "$SHELL_FILE" 2>/dev/null; then
+            warn "$SHELL_NAME: replacing existing block in $SHELL_FILE"
+            sed -i "/$BLOCK_START/,/$BLOCK_END/d" "$SHELL_FILE"
+        fi
+
+        mkdir -p "$(dirname "$SHELL_FILE")"
+
+        if [ "$SHELL_NAME" = "fish" ]; then
+            {
+                echo "$BLOCK_START"
+                echo "set -x PLATFORMIO_CORE_DIR \"$PIO_DIR\""
+                [ -n "$ZEPHYR_BASE_VAL" ] && echo "set -x ZEPHYR_BASE \"$ZEPHYR_BASE_VAL\""
+                echo "$BLOCK_END"
+            } >> "$SHELL_FILE"
+        else
+            {
+                echo "$BLOCK_START"
+                echo "export PLATFORMIO_CORE_DIR=\"$PIO_DIR\""
+                [ -n "$ZEPHYR_BASE_VAL" ] && echo "export ZEPHYR_BASE=\"$ZEPHYR_BASE_VAL\""
+                echo "$BLOCK_END"
+            } >> "$SHELL_FILE"
+        fi
+
+        ok "$SHELL_NAME: written to $SHELL_FILE"
+    done
+
+    echo ""
+    echo -e "  ${YELLOW}Apply without re-login:${NC}"
+    [ -f "$HOME/.bashrc" ] && echo "    bash:  source ~/.bashrc"
+    [ -f "$HOME/.zshrc" ]  && echo "    zsh:   source ~/.zshrc"
+    command -v fish &>/dev/null && echo "    fish:  source ~/.config/fish/conf.d/kl25z.fish"
+    echo ""
+}
+
 # ── Summary ───────────────────────────────────────────────────────────────────
 print_summary() {
     section "Installation Summary"
@@ -274,6 +384,7 @@ main() {
     install_uv
     install_pyocd
     install_udev_rules
+    configure_env_vars
 
     print_summary
 }
