@@ -1,2 +1,3 @@
 SRCS = main.c
-include ../utils/Makefile.inc
+include ../include/Makefile.inc
+CFLAGS += -I../include
