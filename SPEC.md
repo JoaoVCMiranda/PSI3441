@@ -15,10 +15,3 @@ Faça sugestões de melhoria em tudo que for relevante. Inclusive esse arquivo!
 Tenho uma pasta de estudos que você pode participar também!
 
 Quero aprender o máximo possível sobre esses assuntos pois muito me interessam, mas preciso ser eficiente sem gastar muito tempo no código pois hoje em dia as IAs fazem isso muito bem. Então quero aprender o assunto, com código e trechos de código mas a hora da execução que consome bastante tempo pode ser gerado por IA, eu fico com alguns erros interessantes e o melhor do estudo!
-
-Essa é a primeira interação, então ao final você pode remover o que está abaixo 
-
-Configure corretamente o .gitignore
-Ajuste a pasta de entregas para as atividades da disciplina.
-
-E acho que por agora é só! Quais os próximos passos ?
