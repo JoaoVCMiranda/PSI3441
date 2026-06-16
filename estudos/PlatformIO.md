@@ -106,6 +106,33 @@ O arquivo `entregas/platformio.ini` (raiz das entregas) cobre o projeto Zephyr p
 
 ---
 
+## Upload protocol — mbed vs pyocd
+
+O FRDM-KL25Z tem um chip DAPLINK que aparece como duas coisas no Linux:
+- Um drive USB (para drag-and-drop de `.bin`)
+- Um dispositivo CMSIS-DAP (para debug/flash via SWD)
+
+### Por que `mbed` não funciona bem com Zephyr
+
+O protocolo `mbed` (padrão do PlatformIO para essa placa) simplesmente copia o `.bin` para o drive USB. O DAPLINK decide o endereço de flash. Para bare-metal simples funciona; para Zephyr, o binário inclui kernel + app com um layout de memória específico — o DAPLINK às vezes programa no endereço errado ou não confirma se o flash foi concluído. Resultado: código não reflete na placa.
+
+### pyocd resolve
+
+O `pyocd` fala diretamente com o DAPLINK via CMSIS-DAP (USB-HID), detecta o chip (`MKL25Z128VLK4`), usa o flash algorithm correto para o KL25Z e programa setor a setor no endereço exato. Dá progresso real e erro de verificação caso algo falhe.
+
+```ini
+; platformio.ini — projetos Zephyr
+upload_protocol = pyocd
+debug_tool = pyocd
+```
+
+```bash
+# Instalar pyocd sem sujar a home
+uv tool install pyocd
+```
+
+---
+
 ## Curiosidade — como o PlatformIO encontra o Zephyr SDK
 
 Quando `framework = zephyr` é especificado, PlatformIO baixa automaticamente:
