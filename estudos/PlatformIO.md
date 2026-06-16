@@ -116,19 +116,16 @@ O FRDM-KL25Z tem um chip DAPLINK que aparece como duas coisas no Linux:
 
 O protocolo `mbed` (padrão do PlatformIO para essa placa) simplesmente copia o `.bin` para o drive USB. O DAPLINK decide o endereço de flash. Para bare-metal simples funciona; para Zephyr, o binário inclui kernel + app com um layout de memória específico — o DAPLINK às vezes programa no endereço errado ou não confirma se o flash foi concluído. Resultado: código não reflete na placa.
 
-### pyocd resolve
+### cmsis-dap resolve
 
-O `pyocd` fala diretamente com o DAPLINK via CMSIS-DAP (USB-HID), detecta o chip (`MKL25Z128VLK4`), usa o flash algorithm correto para o KL25Z e programa setor a setor no endereço exato. Dá progresso real e erro de verificação caso algo falhe.
+O PlatformIO para `freescalekinetis` aceita estes protocolos: `blackmagic, cmsis-dap, jlink, mbed`. O `pyocd` é instalado como ferramenta interna mas **não é um protocolo de upload válido** para esse platform — tentar usá-lo faz o PlatformIO silenciosamente cair de volta para `mbed`.
+
+O protocolo correto é `cmsis-dap`: usa OpenOCD com transporte CMSIS-DAP (USB-HID), detecta o chip, apaga e programa setor a setor no endereço exato. É o mesmo que o log já aponta como debug tool padrão da placa (`DEBUG: Current (cmsis-dap)`).
 
 ```ini
-; platformio.ini — projetos Zephyr
-upload_protocol = pyocd
-debug_tool = pyocd
-```
-
-```bash
-# Instalar pyocd sem sujar a home
-uv tool install pyocd
+; platformio.ini — todas as entregas (bare-metal e Zephyr)
+upload_protocol = cmsis-dap
+debug_tool = cmsis-dap
 ```
 
 ---
