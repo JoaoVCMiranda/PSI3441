@@ -1,5 +1,21 @@
 {
+    "version": "2.0.0",
     "tasks": [
+        {
+            "label": "Nova entrega",
+            "type": "shell",
+            "command": "bash",
+            "args": [
+                "${workspaceFolder}/.vscode/new-entrega.sh",
+                "${input:projectName}"
+            ],
+            "presentation": {
+                "reveal": "always",
+                "panel": "shared",
+                "clear": true
+            },
+            "problemMatcher": []
+        },
         {
             "type": "cppbuild",
             "label": "C/C++: g++ arquivo de build ativo",
@@ -24,5 +40,12 @@
             "detail": "Tarefa gerada pelo Depurador."
         }
     ],
-    "version": "2.0.0"
+    "inputs": [
+        {
+            "id": "projectName",
+            "type": "promptString",
+            "description": "Nome da nova entrega (ex: 6)",
+            "default": ""
+        }
+    ]
 }
