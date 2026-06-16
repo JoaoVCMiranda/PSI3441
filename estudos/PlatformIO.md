@@ -2,40 +2,17 @@
 
 Ferramenta de build, upload e gestão de dependências para sistemas embarcados. Funciona como backend do VS Code via extensão e também como CLI (`pio`).
 
-## Instalação com uv
-
-O instalador oficial é um script Python. Com `uv` você não precisa tocar no Python do sistema:
-
-```bash
-# 1. Baixa o instalador oficial
-curl -fsSL -o get-platformio.py \
-  https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
-
-# 2. Executa com uv (gerencia Python automaticamente, sem venv manual)
-uv run get-platformio.py
-```
-
-O script instala o PlatformIO em `~/.platformio/` e cria o ambiente em `~/.platformio/penv/`. O executável fica em `~/.platformio/penv/bin/pio`.
-
+>[!IMPORTANT]
+> https://raw.githubusercontent.com/platformio/platformio-core-installer/master/get-platformio.py
+>O script oficial é cara de pau, coloca lixo na minha pasta raiz. `~/.platformio`
+>Não passará
 ### Alternativa — instalar direto como ferramenta uv
-
 ```bash
 uv tool install platformio
 ```
 
-Isso expõe `pio` no PATH sem precisar do script instalador. Mais limpo para quem já usa `uv` como gerenciador principal.
-
-### Adicionar ao PATH (se necessário)
-
-```bash
-# ~/.zshrc ou ~/.bashrc
-export PATH="$HOME/.platformio/penv/bin:$PATH"
-
-# Ou, se instalou via uv tool:
-# uv tool bin já está no PATH após 'uv tool install'
-```
-
-Verificar:
+Isso expõe `pio` no PATH sem precisar do script instalador. Mais limpo para quem já usa `uv` como gerenciador principal. Use `uv`.
+### Verificar
 
 ```bash
 pio --version
@@ -96,13 +73,13 @@ build_flags = -I${PROJECT_DIR}/../include
 
 ### Diferença entre bare-metal e Zephyr
 
-| | Bare-metal | Zephyr |
-|---|---|---|
-| `framework` | omitido | `= zephyr` |
-| Build via PlatformIO | sim (GCC ARM) | sim (CMake interno) |
-| `prj.conf` necessário | não | sim (em `zephyr/`) |
-| `startup.c` / `.ld` | manual (Makefile.inc) | gerenciado pelo BSP |
-| `printk` disponível | não | sim |
+|                       | Bare-metal            | Zephyr              |
+| --------------------- | --------------------- | ------------------- |
+| `framework`           | omitido               | `= zephyr`          |
+| Build via PlatformIO  | sim (GCC ARM)         | sim (CMake interno) |
+| `prj.conf` necessário | não                   | sim (em `zephyr/`)  |
+| `startup.c` / `.ld`   | manual (Makefile.inc) | gerenciado pelo BSP |
+| `printk` disponível   | não                   | sim                 |
 
 > Para as entregas 3–5 (bare-metal Makefile), o `platformio.ini` existe apenas para IDE (IntelliSense, navegação de código). O build real continua com `make`.
 
@@ -136,6 +113,7 @@ Quando `framework = zephyr` é especificado, PlatformIO baixa automaticamente:
 - O pacote `framework-zephyr` (código-fonte do OS)
 - O `platform-freescalekinetis` (suporte à placa)
 
-Tudo vai para `~/.platformio/packages/`. O build ocorre em `.pio/build/frdm_kl25z/`. Por isso o `.gitignore` ignora `.pio/`.
+O build ocorre em `.pio/build/frdm_kl25z/`. Por isso o `.gitignore` ignora `.pio/`.
 
-O `CMakeLists.txt` em `zephyr/` é usado por `west` (ferramenta nativa Zephyr). O PlatformIO gera seu próprio `CMakeLists.txt` internamente — os dois coexistem sem conflito.
+O `CMakeLists.txt` em `zephyr/` é usado por `west` (ferramenta nativa Zephyr). 
+O PlatformIO gera seu próprio `CMakeLists.txt` internamente — os dois coexistem sem conflito.
