@@ -2,13 +2,3 @@
 entregas/**/*.elf
 entregas/**/*.bin
 entregas/**/*.map
-
-# PlatformIO
-.pio/
-entregas/.pio/
-
-# VS Code auto-generated (manter c_cpp_properties.json e launch.json no git)
-.vscode/.browse.c_cpp.db*
-.vscode/ipch/
-.vscode/settings.json
-**/.vscode/settings.json
