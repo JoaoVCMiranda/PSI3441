@@ -12,13 +12,22 @@ Demonstração de multithreading cooperativo/preemptivo no Zephyr OS: dois threa
 | PTB18 | J2-4 | Saída | LED vermelho integrado (active-low) |
 | PTB19 | J2-2 | Saída | LED verde integrado (active-low) |
 
-### Como usar
+### Roteiro de configuração e execução
+
+1. Copiar o template: `cp -r entregas/template entregas/6`
+2. Editar `zephyr/prj.conf` — habilitar apenas GPIO e console (sem ADC, PWM, I2C)
+3. Editar `zephyr/CMakeLists.txt` — renomear projeto para `PSI3441_6`
+4. Escrever `src/main.c` com `K_THREAD_DEFINE` para cada thread
+5. Adicionar `"path": "../entregas/6"` ao workspace `.vscode/PSI3441.code-workspace`
+6. Build e flash:
 
 ```bash
-# Flash
 pio run -t upload
+```
 
-# Monitor serial
+7. Monitor serial:
+
+```bash
 pio device monitor --baud 115200
 ```
 
@@ -67,6 +76,22 @@ Quando um thread chama `k_msleep()`, ele é colocado em estado `suspended` e o s
 #### Por que os LEDs parecem piscar ao mesmo tempo
 
 Cada `k_msleep(N)` insere o thread numa fila temporizada. O SysTick a 48 MHz gera interrupções periódicas que acordam os threads expirados. A resolução de scheduling é tipicamente 1 ms (`CONFIG_SYS_CLOCK_TICKS_PER_SEC=1000`).
+
+#### Conexões com outras entregas
+
+| Entrega | O que foi reutilizado / o que mudou |
+|---|---|
+| 3 | Mesmo LED verde (PTB19 / `led0`) — antes controlado em loop único, agora em thread dedicado |
+| 4 | `GPIO_DT_SPEC_GET` + `gpio_pin_configure_dt` / `gpio_pin_toggle_dt` — API idêntica |
+| 5 | Antes tínhamos um único loop `for(;;)` medindo distância e controlando PWM; aqui o conceito de "tarefas paralelas" é formalizado com threads separados e prioridades explícitas |
+
+O `k_msleep()` desta entrega é o sucessor direto do `k_sleep(K_MSEC(...))` usado nas entregas anteriores — a semântica é a mesma, mas agora a pausa libera a CPU para outros threads em vez de desperdiçar ciclos.
+
+#### Sugestões de melhoria
+
+- Adicionar um terceiro thread que lê `k_uptime_get_32()` e pisca o LED azul (PTD1) numa frequência derivada do uptime, demonstrando parâmetros de thread (usando `p1` em vez de hardcode).
+- Experimentar `CONFIG_TIMESLICE_SIZE` para ver o efeito do time-slicing quando dois threads têm a mesma prioridade.
+- Medir o jitter de `k_msleep` com `k_cycle_get_32()` antes e depois do sleep — tipicamente < 1 ms mas visível.
 
 ---
 

@@ -14,18 +14,28 @@ Dois threads concorrentes leem o ADC0_SE8 (PTB0/A0) na maior taxa possível, apl
 
 Conecte um potenciômetro de 10 kΩ entre 3,3 V e GND com o cursor em PTB0, ou use qualquer sinal analógico de 0–3,3 V.
 
-### Como usar
+### Roteiro de configuração e execução
+
+1. Copiar o template: `cp -r entregas/template entregas/8`
+2. Editar `zephyr/prj.conf`:
+   - Habilitar `CONFIG_ADC=y` e `CONFIG_LOG=y` / `CONFIG_LOG_MODE_DEFERRED=y`
+   - Definir `CONFIG_LOG_BUFFER_SIZE=2048`
+3. Editar `zephyr/CMakeLists.txt` — renomear projeto para `PSI3441_8`
+4. Escrever `src/main.c` com struct `sample`, `K_MSGQ_DEFINE`, `fn_acquire` e `fn_comm`
+5. Adicionar `"path": "../entregas/8"` ao workspace `.vscode/PSI3441.code-workspace`
+6. Para comparar **sem filtro**: editar `platformio.ini` → `build_flags = -DUSE_FIR=0`, fazer flash e anotar taxa
+7. Para comparar **com filtro**: `build_flags = -DUSE_FIR=1`, refazer flash e anotar taxa
+8. Build e flash:
 
 ```bash
-# Flash
 pio run -t upload
+```
 
-# Visualização em tempo real (em outro terminal)
+9. Visualização em tempo real (em outro terminal):
+
+```bash
 pip install pyserial matplotlib
 python monitor.py /dev/ttyACM0 115200
-
-# Sem FIR: edite platformio.ini → build_flags = -DUSE_FIR=0
-# Com FIR (padrão): build_flags = -DUSE_FIR=1
 ```
 
 ### Funcionamento
@@ -122,6 +132,24 @@ Quando a taxa de aquisição excede a capacidade de processamento do deferred lo
 **7. Qual configuração apresentou o melhor compromisso entre qualidade do sinal e taxa de aquisição?**
 
 FIR habilitado a ~300–400 Hz. Em taxas maiores, `t_comm` passa a ser o afunilamento e a fila k_msgq acumula descartando amostras — o sinal reconstruído no Python tem lacunas. Em taxas menores que 200 Hz, a latência de visualização fica perceptível mas a qualidade do sinal filtrado melhora (mais ciclos de clock disponíveis para o FIR poderia usar mais taps).
+
+#### Conexões com outras entregas
+
+| Entrega | O que foi reutilizado / o que mudou |
+|---|---|
+| 4 | ADC0_SE8 (PTB0) — mesmo canal, mesma config (`ADC_GAIN_1`, `ADC_REF_VDD_1`, 12 bits); ali era leitura pontual em loop único, aqui é contínua em thread dedicado |
+| 5 | `k_cycle_get_32()` para medir tempo de pulso ultrassônico; aqui o mesmo mecanismo vira timestamp de alta resolução para cada amostra ADC |
+| 6 | Arquitetura de dois threads; aqui a comunicação entre eles evolui de variáveis compartilhadas para `k_msgq` — dados fluem sem acesso concorrente |
+| 7 | `k_mutex` protegia acesso compartilhado; `k_msgq` elimina o acesso compartilhado completamente: o producer nunca lê o que o consumer escreveu e vice-versa |
+
+O `monitor.py` desta entrega é o irmão didático do `monitor.py` da entrega 5 (que fazia leitura crua do serial); aqui adiciona-se parsing de CSV, threading e gráfico ao vivo.
+
+#### Sugestões de melhoria
+
+- **Protocolo binário**: substituir CSV por pacotes de 8 bytes (`uint32_t ts + int16_t raw + int16_t fir`) reduziria o payload de ~22 bytes para 8 bytes, elevando o teto da UART para ~1 440 Hz.
+- **FIR com coeficientes reais**: implementar um filtro Hamming de 16 taps (coeficientes Q15) para ter resposta de frequência mais seletiva — bom exercício de DSP em ponto fixo.
+- **DMA + UART**: usar o DMA do KL25Z para transferir o buffer de amostras diretamente para a UART sem envolver a CPU, o que deixaria `t_comm` livre para processar em vez de bloquear em `printk`.
+- **Timestamp absoluto**: registrar `k_uptime_get_32()` em ms junto com os ciclos para correlacionar com eventos externos no Python.
 
 ---
 

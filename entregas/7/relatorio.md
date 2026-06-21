@@ -12,13 +12,22 @@ Dois threads compartilham um contador inteiro. O acesso é protegido por `k_mute
 | PTB18 | J2-4 | Saída | LED vermelho — pulsa com o producer |
 | PTB19 | J2-2 | Saída | LED verde — pulsa com o consumer |
 
-### Como usar
+### Roteiro de configuração e execução
+
+1. Copiar a entrega 6 como base (`cp -r entregas/6 entregas/7`) — mesmos pinos de LED
+2. Editar `zephyr/CMakeLists.txt` — renomear projeto para `PSI3441_7`
+3. `zephyr/prj.conf` — sem mudanças (GPIO + console são suficientes; mutex é parte do kernel)
+4. Reescrever `src/main.c`: adicionar `K_MUTEX_DEFINE`, `shared_count`, lógica producer/consumer
+5. Adicionar `"path": "../entregas/7"` ao workspace `.vscode/PSI3441.code-workspace`
+6. Build e flash:
 
 ```bash
-# Flash
 pio run -t upload
+```
 
-# Monitor serial
+7. Monitor serial:
+
+```bash
 pio device monitor --baud 115200
 ```
 
@@ -75,6 +84,22 @@ O `k_msleep(500)` fica **fora** da seção crítica: segurar o mutex durante um 
 #### Priority inversion
 
 Se um thread de baixa prioridade segura o mutex e um de alta prioridade tenta adquiri-lo, o de alta bloqueia. O Zephyr resolve isso com **priority inheritance**: o thread que segura o mutex temporariamente herda a prioridade do waiter mais urgente.
+
+#### Conexões com outras entregas
+
+| Entrega | O que foi reutilizado / o que mudou |
+|---|---|
+| 4 | ADC como fonte de dado analógico — aqui o "dado" é simulado por um contador, mas o padrão read→process→output é o mesmo |
+| 5 | Na atividade 5 havia um único loop medindo e controlando; aqui a medição (producer) e o report (consumer) são threads separados — a mesma separação de responsabilidades, agora com proteção formal |
+| 6 | Reutiliza `K_THREAD_DEFINE` e os mesmos LEDs; adiciona a primitiva de sincronização `k_mutex` sobre a estrutura de threads da entrega anterior |
+
+O padrão **producer/consumer com mutex** é a base de qualquer pipeline de dados em RTOS — a entrega 8 evolui isso para `k_msgq` que elimina o acesso compartilhado completamente.
+
+#### Sugestões de melhoria
+
+- Adicionar um segundo contador `uint64_t total_events` (sem reset) protegido pelo mesmo mutex, para mostrar que múltiplos campos podem ser protegidos por uma única seção crítica.
+- Experimentar retirar o mutex e aumentar a frequência do producer para tornar o race condition visível no serial (valores inconsistentes de `snap`).
+- Substituir `uint32_t shared_count` por uma struct com timestamp e valor — mostra que mutex protege estruturas complexas da mesma forma que escalares.
 
 ---
 
