@@ -11,15 +11,12 @@
 		},
 		{
 			"path": "../entregas/5"
-		},
-		{
-			"path": "../entregas/5-1"
 		}
 	],
   "settings": {
     "platformio-ide.useBuiltinPIOCore": false,
     "platformio-ide.useBuiltinPython": false,
-    "platformio-ide.customPATH": "/home/jvcm/.local/share/uv/tools/platformio/bin",
+    "platformio-ide.customPATH": "$HOME/.local/share/uv/tools/platformio/bin",
     "platformio-ide.autoOpenPlatformIOIniFile": true,
     "platformio-ide.activateProjectOnTextEditorChange": true
   }
