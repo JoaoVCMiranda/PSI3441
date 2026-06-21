@@ -25,7 +25,7 @@
   "settings": {
     "platformio-ide.useBuiltinPIOCore": false,
     "platformio-ide.useBuiltinPython": false,
-    "platformio-ide.customPATH": "$HOME/.local/share/uv/tools/platformio/bin",
+    "platformio-ide.customPATH": "/home/jvcm/.local/share/uv/tools/platformio/bin",
     "platformio-ide.autoOpenPlatformIOIniFile": true,
     "platformio-ide.activateProjectOnTextEditorChange": true
   }
