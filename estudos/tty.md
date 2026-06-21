@@ -25,7 +25,8 @@ Veja que o acesso a porta `/dev/ttyACM0` está no grupo `root` apenas.
 
 Para resolver você pode fazer um grupo, ou mudar o dono do arquivo diretamente com 
 
-
-```
+```sh 
 sudo chwon <user>:<user> /dev/tty/ACM0
 ```
+
+> Deve ser feito ao iniciar o monitoramento após reiniciar o computador ou adicionar o usuário ao grupo de leitura de `/dev/ttyACM0`
