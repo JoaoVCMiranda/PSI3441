@@ -34,8 +34,7 @@ pio run -t upload
 9. Visualização em tempo real (em outro terminal):
 
 ```bash
-pip install pyserial matplotlib
-python monitor.py /dev/ttyACM0 115200
+uv run monitor.py /dev/ttyACM0 115200
 ```
 
 ### Funcionamento

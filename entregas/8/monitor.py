@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
+# /// script
+# dependencies = ["pyserial", "matplotlib"]
+# ///
 """
 PSI3441 — Atividade 8 — Visualização em tempo real
 Lê CSV de /dev/ttyACM0 e plota raw vs FIR em tempo real.
 
-Dependências:
-    pip install pyserial matplotlib
-
 Uso:
-    python monitor.py [porta] [baud]
+    uv run monitor.py [porta] [baud]
 
 Exemplos:
-    python monitor.py /dev/ttyACM0 115200
-    python monitor.py COM3 115200
+    uv run monitor.py /dev/ttyACM0 115200
+    uv run monitor.py COM3 115200
 """
 
 import sys
