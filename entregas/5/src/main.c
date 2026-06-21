@@ -1,115 +1,152 @@
-/* PSI3441 — Atividade 5: PWM via pwm_z42 + HC-SR04 + UART debug
+/*
+ * PSI3441 — Atividade 5 (Zephyr híbrido)
  *
- * Radar:  TPM2_CH1 / PTB19 (LED verde, active-low, low-true PWM)
- *         mais perto = pisca mais rapido; sem objeto = LED apagado
+ * Radar ultrassônico: HC-SR04 em PTC8/PTC9, LED verde (PTB19) via TPM2_CH1.
  *
- * HC-SR04: TRIG = PTC8 (J1-9)   ECHO = PTC9 (J1-10)
- *
- * Debug:  UART0 115200 8N1 via DAPLINK USB-serial
- *           cat /dev/ttyACM0        (Linux)
- *           screen /dev/ttyACM0 115200
+ * Abordagem:
+ *   - GPIO/console: API nativa do Zephyr (sem tocar SCGC5/PCR/PDDR manualmente)
+ *   - Timing do pulso de echo: leitura direta de PDIR — overhead do driver Zephyr
+ *     (~alguns µs por chamada) é inaceitável para o loop de medição do HC-SR04
+ *   - PWM: pwm_z42 (bare-metal) porque a API Zephyr de PWM não expõe o registro
+ *     TPM->MOD para atualização em runtime — esse é o ponto didático central
  */
 
+#include <zephyr.h>
+#include <drivers/gpio.h>
 #include "pwm_z42.h"
+#include <device.h>
 
-/* HC-SR04 em PORTC */
-#define TRIG_PIN    (1u << 8)   /* PTC8 */
-#define ECHO_PIN    (1u << 9)   /* PTC9 */
+/* ── pinos HC-SR04 ───────────────────────────────────────────────────── */
+#define PIN_TRIG  8   /* PTC8 — saída (disparo) */
+#define PIN_ECHO  9   /* PTC9 — entrada (eco)   */
 
-/* Frequencias do radar — TPM clock = PLLFLL~21 MHz / PS=128 = ~164 kHz
- *   MOD=16000 -> f = 164000/16001 ~ 10 Hz  (perto)
- *   MOD=60000 -> f = 164000/60001 ~  2.7 Hz (longe)  */
-#define BLINK_NEAR  16000u
-#define BLINK_FAR   60000u
-#define DUTY_DIV    5u          /* CnV = MOD/5 = 20 % duty */
+/* Leitura direta de PDIR no loop crítico de timing.
+ * gpio_pin_get() percorre o driver Zephyr a cada chamada; para medir
+ * pulsos de <150 µs (distâncias curtas), o overhead vira erro de medição.
+ * Zephyr ainda configura MUX e SCGC5 corretamente via gpio_pin_configure(). */
+#define ECHO_IS_HIGH()  (GPIOC->PDIR & (1u << PIN_ECHO))
 
-#define MAX_CNT     50000u
+/* ── TPM2 via pwm_z42 ────────────────────────────────────────────────
+ * Clock: MCGIRCLK (Fast IRC = 4 MHz, independente do PLL que o Zephyr usa)
+ * Prescaler PS=64  →  f_tpm = 4 MHz / 64 = 62 500 Hz  (1 tick = 16 µs)
+ *
+ * Bare-metal usava PLLFLL~21 MHz / PS=128 ≈ 164 kHz.
+ * No Zephyr o PLL está em 48 MHz; manter PS=128 daria 375 kHz e
+ * MOD_FAR > 65535 — não cabe em 16 bits. MCGIRCLK resolve o problema.
+ *
+ *   f_pwm = 62500 / (MOD + 1)
+ *   MOD_NEAR = 6250  → ~10 Hz  (objeto perto)
+ *   MOD_FAR  = 23150 → ~2.7 Hz (objeto longe)           */
+#define MOD_NEAR        6250U
+#define MOD_FAR        23150U
+#define DUTY_DIV           5U   /* CnV = MOD/5 → 20 % duty */
 
-/* ── UART0 debug (PTA1=RX, PTA2=TX) ─────────────────────────────── */
+/* Timeout: 25 ms ≈ 4,3 m (v_som ≈ 343 m/s, ida+volta / 2) */
+#define ECHO_TIMEOUT_US  25000U
 
-static void uart_init(void) {
-    SIM->SCGC4 |= SIM_SCGC4_UART0_MASK;
-    SIM->SOPT2 |= SIM_SOPT2_UART0SRC(1);   /* MCGFLLCLK ~21 MHz */
-    PORTA->PCR[1] = PORT_PCR_MUX(2);        /* UART0_RX */
-    PORTA->PCR[2] = PORT_PCR_MUX(2);        /* UART0_TX */
-    UART0_BASE_PTR->BDH = 0;
-    UART0_BASE_PTR->BDL = 11;               /* SBR=11 -> ~119200 baud @ 21 MHz */
-    UART0_BASE_PTR->C1  = 0;
-    UART0_BASE_PTR->C2  = UART0_C2_TE_MASK;
-}
+/* CPU a 48 MHz: cada ciclo = ~20,8 ns → divisor para converter ciclos → µs */
+#define CPU_MHZ  48U
 
-static void uart_putc(char c) {
-    while (!(UART0_BASE_PTR->S1 & UART0_S1_TDRE_MASK)) {}
-    UART0_BASE_PTR->D = (unsigned char)c;
-}
+/* ── medição do echo ─────────────────────────────────────────────────
+ * k_cycle_get_32() retorna ciclos do relógio do sistema (SysTick a 48 MHz).
+ * No Cortex-M0+ não há DWT, então Zephyr usa SysTick com extensão por software.
+ * Resolução: 1 ciclo ≈ 20 ns — suficiente para HC-SR04 (mínimo ~150 µs).   */
+static uint32_t measure_echo_us(const struct device *portc)
+{
+    uint32_t t, elapsed;
 
-static void uart_putu(unsigned int n) {
-    if (n >= 10u) uart_putu(n / 10u);
-    uart_putc('0' + (char)(n % 10u));
-}
+    /* Trigger: 10 µs HIGH — k_busy_wait() faz busy-loop calibrado pela BSP  */
+    gpio_pin_set(portc, PIN_TRIG, 1);
+    k_busy_wait(10);
+    gpio_pin_set(portc, PIN_TRIG, 0);
 
-/* ── HC-SR04 ──────────────────────────────────────────────────────── */
-
-static unsigned int measureEcho(void) {
-    unsigned int cnt = 0, t;
-
-    GPIOC->PSOR = TRIG_PIN;
-    for (volatile int i = 0; i < 150; i++) {}   /* ~10 us */
-    GPIOC->PCOR = TRIG_PIN;
-
-    /* aguarda rising edge; retorna MAX_CNT se nao houver eco */
-    for (t = 0; t < MAX_CNT && !(GPIOC->PDIR & ECHO_PIN); t++) {}
-    if (t >= MAX_CNT) return MAX_CNT;
-
-    /* conta ate falling edge */
-    while ((GPIOC->PDIR & ECHO_PIN) && cnt < MAX_CNT) cnt++;
-    return cnt ? cnt : 1u;
-}
-
-/* ── main ─────────────────────────────────────────────────────────── */
-
-int main(void) {
-    /* clocks das portas */
-    SIM->SCGC5 |= SIM_SCGC5_PORTA_MASK | SIM_SCGC5_PORTC_MASK;
-
-    uart_init();
-
-    /* PTC8 = TRIG (saida), PTC9 = ECHO (entrada, pull-down) */
-    PORTC->PCR[8] = PORT_PCR_MUX(1);
-    PORTC->PCR[9] = PORT_PCR_MUX(1) | PORT_PCR_PE_MASK;   /* PE=1, PS=0 = pull-down */
-    GPIOC->PDDR |= TRIG_PIN;
-    GPIOC->PCOR  = TRIG_PIN;
-
-    /* PWM: TPM2_CH1 / PTB19, low-true (ELSA=1), LED off = CnV=0 */
-    pwm_tpm_Init(TPM2, TPM_PLLFLL, BLINK_FAR, TPM_CLK, PS_128, EDGE_PWM);
-    pwm_tpm_Ch_Init(TPM2, 1, TPM_PWM_L, GPIOB, 19);
-    pwm_tpm_CnV(TPM2, 1, 0);   /* CnV=0 -> sempre HIGH -> LED apagado */
-
-    for (;;) {
-        unsigned int echo = measureEcho();
-        unsigned int mod  = TPM2_BASE_PTR->MOD;
-        unsigned int cnv;
-
-        if (echo >= MAX_CNT) {
-            /* sem objeto: LED apagado */
-            cnv = 0;
-        } else {
-            /* radar: echo menor -> MOD menor -> frequencia maior -> pisca mais rapido */
-            mod = BLINK_NEAR + echo * (BLINK_FAR - BLINK_NEAR) / MAX_CNT;
-            cnv = mod / DUTY_DIV;
-            TPM2_BASE_PTR->MOD = (uint16_t)mod;
-        }
-        pwm_tpm_CnV(TPM2, 1, (uint16_t)cnv);
-
-        /* debug: "echo mod\n" */
-        uart_putu(echo);
-        uart_putc(' ');
-        uart_putu(mod);
-        uart_putc('\n');
-
-        /* >= 60 ms entre triggers (datasheet HC-SR04) */
-        for (volatile unsigned int i = 0; i < 400000u; i++) {}
+    /* Aguarda echo subir (início do pulso ultrassônico) */
+    t = k_cycle_get_32();
+    while (!ECHO_IS_HIGH()) {
+        if ((k_cycle_get_32() - t) / CPU_MHZ > ECHO_TIMEOUT_US)
+            return ECHO_TIMEOUT_US;   /* sem sensor ou objeto fora do alcance */
     }
 
-    return 0;
+    /* Conta ciclos enquanto echo está alto (eco em trânsito) */
+    t = k_cycle_get_32();
+    while (ECHO_IS_HIGH()) {
+        if ((k_cycle_get_32() - t) / CPU_MHZ > ECHO_TIMEOUT_US)
+            return ECHO_TIMEOUT_US;
+    }
+    elapsed = k_cycle_get_32() - t;
+    return elapsed / CPU_MHZ;   /* ciclos → µs */
+}
+
+void main(void)
+{
+    /* Zephyr entrega o device já com clock gate habilitado.
+     * Bare-metal precisava: SIM->SCGC5 |= SIM_SCGC5_PORTC_MASK             */
+   
+    //const struct device *portc = device_get_binding("GPIOC");
+    const struct device *portc =DEVICE_DT_GET(DT_NODELABEL(gpioc));
+
+// DEBUG
+    printk("portc=%p\n", (void *)portc);
+
+    gpio_pin_configure(portc, PIN_TRIG, GPIO_OUTPUT_LOW);
+    gpio_pin_configure(portc, PIN_ECHO, GPIO_INPUT);
+    printk("gpio ok\n");
+
+    pwm_tpm_Init(TPM2, TPM_MCGIRCLK, MOD_FAR, TPM_CLK, PS_64, EDGE_PWM);
+    printk("tpm init ok\n");
+
+    pwm_tpm_Ch_Init(TPM2, 1, TPM_PWM_L, GPIOB, 19);
+    pwm_tpm_CnV(TPM2, 1, 0);
+    printk("tpm ch ok\n");
+    /* gpio_pin_configure() escreve PCR[pin] = MUX(1) + direção em PDDR.
+     * Bare-metal: PORTC->PCR[8] = PORT_PCR_MUX(1); GPIOC->PDDR |= TRIG_PIN */
+    gpio_pin_configure(portc, PIN_TRIG, GPIO_OUTPUT_LOW);
+    gpio_pin_configure(portc, PIN_ECHO, GPIO_INPUT);
+
+    /* ── TPM2 via pwm_z42 — a parte bare-metal que permanece ──────────
+     * Zephyr não expõe "mudar MOD em runtime" via pwm_set_cycles() — a API
+     * só altera CnV (duty) sem reconfigurar o período. Para o radar, onde
+     * a frequência de piscar varia com a distância, precisamos do TPM direto.
+     *
+     * pwm_tpm_Init: habilita clock do TPM2 (SCGC6), configura SOPT2 e SC   */
+    pwm_tpm_Init(TPM2, TPM_MCGIRCLK, MOD_FAR, TPM_CLK, PS_64, EDGE_PWM);
+
+    /* pwm_tpm_Ch_Init: escreve PCR[19] = MUX(3) → PTB19 vira TPM2_CH1.
+     * Zephyr não sabe desse pino — mas não conflita: nunca chamamos
+     * gpio_pin_configure() para PTB19.                                      */
+    pwm_tpm_Ch_Init(TPM2, 1, TPM_PWM_L, GPIOB, 19);
+    pwm_tpm_CnV(TPM2, 1, 0);   /* low-true: CnV=0 → sempre HIGH → LED apagado */
+
+    /* printk() usa o console Zephyr (UART0 configurada pelo BSP).
+     * Bare-metal precisava de uart_init() com SIM_SOPT2, BDH, BDL, C2...  */
+    printk("PSI3441 — HC-SR04 + TPM2 via Zephyr + pwm_z42\n");
+    printk("  IRC 4 MHz, PS=64 → MOD_NEAR=%u (~10 Hz)  MOD_FAR=%u (~2.7 Hz)\n",
+           MOD_NEAR, MOD_FAR);
+
+    for (;;) {
+        uint32_t echo_us = measure_echo_us(portc);
+        uint32_t mod = 0;
+
+        if (echo_us >= ECHO_TIMEOUT_US) {
+            pwm_tpm_CnV(TPM2, 1, 0);   /* sem objeto → LED apagado */
+        } else {
+            /* Mapeia distância → período (perto = MOD menor = pisca mais rápido) */
+            mod = MOD_NEAR + echo_us * (MOD_FAR - MOD_NEAR) / ECHO_TIMEOUT_US;
+
+            /* Escrita direta — única linha "fora do modelo Zephyr".
+             * pwm_z42 não oferece função para alterar MOD em runtime;
+             * usar o ponteiro do SDK é a solução bare-metal intencional.    */
+            TPM2->MOD = (uint16_t)mod;
+            pwm_tpm_CnV(TPM2, 1, (uint16_t)(mod / DUTY_DIV));
+        }
+
+        /* Distância: d (cm) = echo_us / 58  (v_som ≈ 343 m/s, ida+volta)  */
+        printk("echo=%5u us  dist=%3u cm  mod=%5u\n",
+               echo_us,
+               echo_us / 58U,
+               mod);
+
+        /* HC-SR04 datasheet: >= 60 ms entre triggers para evitar eco falso */
+        k_sleep(K_MSEC(30));
+    }
 }
