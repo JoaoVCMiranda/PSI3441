@@ -98,13 +98,19 @@ static inline uint32_t cycles_to_us(uint32_t cyc)
 
 /* ── Thread de aquisição ───────────────────────────────────────────────── */
 #define RATE_WINDOW  200   /* amostras por janela de medição */
-#define STACK_SIZE  1024
+
+/* t_acquire chama o driver ADC completo (IRQ handler + semáforo interno),
+ * que precisa de mais pilha do que t_comm. 1024 causava stack overflow
+ * silencioso, travando a thread sem nenhuma mensagem de erro.             */
+#define STACK_ACQ   2048
+#define STACK_COMM  1024
 
 static void fn_acquire(void *p1, void *p2, void *p3)
 {
     const struct device *adc = DEVICE_DT_GET(ADC_NODE);
     if (!device_is_ready(adc)) {
-        LOG_ERR("ADC não está pronto");
+        /* printk em vez de LOG_ERR: visível mesmo se o LOG backend falhar */
+        printk("# ERRO: ADC nao esta pronto\n");
         return;
     }
     adc_channel_setup(adc, &ch_cfg);
@@ -171,8 +177,8 @@ static void fn_comm(void *p1, void *p2, void *p3)
     }
 }
 
-K_THREAD_DEFINE(t_acq,  STACK_SIZE, fn_acquire, NULL, NULL, NULL, 3, 0, 0);
-K_THREAD_DEFINE(t_comm, STACK_SIZE, fn_comm,    NULL, NULL, NULL, 5, 0, 0);
+K_THREAD_DEFINE(t_acq,  STACK_ACQ,  fn_acquire, NULL, NULL, NULL, 3, 0, 0);
+K_THREAD_DEFINE(t_comm, STACK_COMM, fn_comm,    NULL, NULL, NULL, 5, 0, 0);
 
 void main(void)
 {
