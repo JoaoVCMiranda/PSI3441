@@ -98,6 +98,7 @@ void main(void)
     pwm_tpm_Ch_Init(TPM2, 1, TPM_PWM_L, GPIOB, 19);
     pwm_tpm_CnV(TPM2, 1, 0);
     printk("tpm ch ok\n");
+
     /* gpio_pin_configure() escreve PCR[pin] = MUX(1) + direção em PDDR.
      * Bare-metal: PORTC->PCR[8] = PORT_PCR_MUX(1); GPIOC->PDDR |= TRIG_PIN */
     gpio_pin_configure(portc, PIN_TRIG, GPIO_OUTPUT_LOW);
