@@ -1,7 +1,7 @@
 > [!IMPORTANT]
 > João Victor Cavalcante Miranda (#14582927)
 
-## Atividade 5-1 — HC-SR04 + PWM radar (Zephyr híbrido)
+## Atividade 5 — HC-SR04 + PWM radar (Zephyr híbrido)
 
 Versão Zephyr da entrega 5. Mantém o mesmo circuito (HC-SR04 em PTC8/PTC9, LED verde PTB19 via TPM2_CH1), mas substitui toda a inicialização manual por APIs do Zephyr onde possível.
 
@@ -14,7 +14,7 @@ Versão Zephyr da entrega 5. Mantém o mesmo circuito (HC-SR04 em PTC8/PTC9, LED
 | PWM (TPM2) | `pwm_z42` | `pwm_z42` (igual — API Zephyr não expõe MOD runtime) |
 | Leitura do echo | `GPIOC->PDIR` direto | `GPIOC->PDIR` direto (overhead do driver inaceitável) |
 
-### Por que TPM2->MOD continua bare-metal
+### Por que TPM2->MOD continua bare-metal ?
 
 A API Zephyr `pwm_set_cycles()` altera apenas `CnV` (duty cycle). Não há como mudar o período (`MOD`) em runtime via driver padrão. Para o efeito radar — frequência de piscar proporcional à distância — é necessário escrever `TPM2->MOD` diretamente.
 
@@ -30,7 +30,7 @@ Bare-metal usava `PLLFLL` (~21 MHz). No Zephyr o PLL está em 48 MHz; com PS=128
 | MOD_NEAR (~10 Hz) | 16 000 | 6 250 |
 | MOD_FAR (~2.7 Hz) | 60 000 | 23 150 |
 
-### Conexões (idênticas à entrega 5)
+### Conexões
 
 | Pino (KL25Z) | Header (FRDM) | Direção | Função |
 |---|---|---|---|

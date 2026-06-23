@@ -147,6 +147,6 @@ void main(void)
                mod);
 
         /* HC-SR04 datasheet: >= 60 ms entre triggers para evitar eco falso */
-        k_sleep(K_MSEC(30));
+        k_sleep(K_MSEC(60));
     }
 }
